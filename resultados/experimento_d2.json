@@ -1,0 +1,89 @@
+{
+  "sin_persistencia": {
+    "configuracion": "Contraria: Sin persistencia (--save '' --appendonly no)",
+    "antes": {
+      "stream_existe": true,
+      "xlen": 3000,
+      "grupos": [
+        {
+          "name": "ingesta",
+          "consumers": 1,
+          "pending": 100,
+          "entries_read": 1600,
+          "lag": 1400
+        },
+        {
+          "name": "tablero",
+          "consumers": 1,
+          "pending": 0,
+          "entries_read": 1500,
+          "lag": 1500
+        }
+      ],
+      "claves_ultimo": 16,
+      "claves_ventana": 8,
+      "claves_tipo": 3,
+      "ranking_card": 8
+    },
+    "despues": {
+      "stream_existe": false,
+      "xlen": 0,
+      "grupos": [],
+      "claves_ultimo": 0,
+      "claves_ventana": 0,
+      "claves_tipo": 0,
+      "ranking_card": 0
+    }
+  },
+  "con_aof_volumen": {
+    "configuracion": "Elegida (Parte A): AOF everysec con volumen pmd-redis",
+    "antes": {
+      "stream_existe": true,
+      "xlen": 3000,
+      "grupos": [
+        {
+          "name": "ingesta",
+          "consumers": 1,
+          "pending": 100,
+          "entries_read": 1600,
+          "lag": 1400
+        },
+        {
+          "name": "tablero",
+          "consumers": 1,
+          "pending": 0,
+          "entries_read": 1500,
+          "lag": 1500
+        }
+      ],
+      "claves_ultimo": 16,
+      "claves_ventana": 8,
+      "claves_tipo": 3,
+      "ranking_card": 8
+    },
+    "despues": {
+      "stream_existe": true,
+      "xlen": 3000,
+      "grupos": [
+        {
+          "name": "ingesta",
+          "consumers": 1,
+          "pending": 100,
+          "entries_read": 1600,
+          "lag": 1400
+        },
+        {
+          "name": "tablero",
+          "consumers": 1,
+          "pending": 0,
+          "entries_read": 1500,
+          "lag": 1500
+        }
+      ],
+      "claves_ultimo": 16,
+      "claves_ventana": 8,
+      "claves_tipo": 3,
+      "ranking_card": 8
+    }
+  }
+}

@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Informe Tarea 2 — Redis + HBase: del stream a la historia</title>
+<style>
+  @page {
+    size: letter;
+    margin: 1.1cm 1.3cm 1.1cm 1.3cm;
+  }
+  body {
+    font-family: "Liberation Sans", "DejaVu Sans", Arial, sans-serif;
+    font-size: 8.6pt;
+    line-height: 1.25;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 0;
+  }
+  h1 {
+    font-size: 12.5pt;
+    margin: 0 0 2px 0;
+    color: #0f2b46;
+  }
+  .subtitulo {
+    font-size: 8.3pt;
+    color: #444;
+    margin-bottom: 6px;
+    border-bottom: 1.5px solid #0f2b46;
+    padding-bottom: 3px;
+  }
+  h2 {
+    font-size: 10pt;
+    color: #0f2b46;
+    margin: 7px 0 3px 0;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 1px;
+  }
+  h3 {
+    font-size: 9pt;
+    color: #1e3a5f;
+    margin: 5px 0 2px 0;
+  }
+  p {
+    margin: 2px 0 3px 0;
+    text-align: justify;
+  }
+  ul {
+    margin: 2px 0 4px 16px;
+    padding: 0;
+  }
+  li {
+    margin-bottom: 2px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 3px 0 5px 0;
+    font-size: 7.9pt;
+  }
+  th, td {
+    border: 1px solid #cbd5e1;
+    padding: 2px 4px;
+    text-align: left;
+  }
+  th {
+    background-color: #f1f5f9;
+    font-weight: bold;
+    color: #0f2b46;
+  }
+  code {
+    font-family: "Liberation Mono", "DejaVu Sans Mono", monospace;
+    font-size: 7.6pt;
+    background-color: #f8fafc;
+    padding: 0 2px;
+  }
+  .interp {
+    background-color: #f8fafc;
+    border-left: 3px solid #0f2b46;
+    padding: 3px 6px;
+    margin: 2px 0 4px 0;
+    font-size: 8.1pt;
+  }
+</style>
+</head>
+<body>
+
+<h1>Tarea 2: Redis + HBase — del stream a la historia</h1>
+<div class="subtitulo">
+  <b>Procesamiento Masivo de Datos (ELE051-B / EIN102B)</b> · USM 2026-2 · Paralelo 701 · Profesor: Diego Ramírez estudiante: <b>Ignacio Castillo</b><br>
+  <b>Hardware de medición:</b> AMD Ryzen 7 4800H (8C/16T, 2.9–4.2 GHz) · 16 GB RAM DDR4 · Linux (Docker 29.6, Redis 7-alpine, HBase 2.5.15 standalone)
+</div>
+
+<h2>1. Resumen del Pipeline y Cuadratura de Control (Parte B)</h2>
+<p>
+  El generador con <code>eventos(t0="2026-11-02T00:00:00-03:00", semilla=2026)</code> produce <b>864.000 eventos históricos</b> (5 días) y <b>7.200 eventos en vivo</b> (1 hora a 20× = 25 ms/evento), totalizando <b>871.200 eventos</b>. La carga histórica directa por lotes (<code>batch_size=5000</code>) insertó los 864.000 eventos en <code>lecturas</code> en <b>32.14 s (26,881 filas/s)</b> y en <code>lecturas_tipo</code> en <b>32.09 s (26,924 filas/s)</b> (32.14 s en paralelo). Al finalizar la hora en vivo con los grupos independientes <code>ingesta</code> y <code>tablero</code> sobre <code>sensores:t2</code> (<code>MAXLEN ~ 10000</code>), <code>verificar.py</code> confirma <code>XPENDING = 0</code> en ambos grupos y exactamente <b>853.953 filas</b> en cada tabla de HBase (871.200 − 17.243 repetidos exactos − 4 choques de milisegundo por lecturas tardías con distinto valor).
+</p>
+
+<h2>2. Respuestas a las 6 Preguntas (Parte C — Mediana de 5 corridas sin la 1ª)</h2>
+
+<h3>P1. "Ahora" — Redis contra HBase</h3>
+<p>
+  <b>Consultas:</b> En Redis, un pipeline con 16 <code>HGETALL ultimo:&lt;est&gt;</code> y <code>ZREVRANGE ranking:flujo 0 4 WITHSCORES</code> (<b>1.061 ms</b>). En HBase, como la clave <code>estacion#timestamp</code> ordena ascendentemente, obtener "lo último" exige abrir 16 scanners reversos (<code>scan(row_prefix=b"&lt;est&gt;#", reverse=True, limit=1)</code>) y ordenar en Python (<b>260.988 ms</b>, es decir, <b>246.0× más lento</b>). <b>Top 5 flujo vehicular:</b> <code>SPP-002</code> (98.0), <code>HUA-002</code> (97.1), <code>HUA-001</code> (90.1), <code>PEN-001</code> (68.6), <code>CC-002</code> (62.7).
+</p>
+<table>
+  <tr><th>Estación</th><th>Tipo</th><th>Redis</th><th>HBase</th><th>Hora (07-nov)</th><th>Estación</th><th>Tipo</th><th>Redis</th><th>HBase</th><th>Hora (07-nov)</th></tr>
+  <tr><td><code>CC-001</code></td><td>flujo_vehicular</td><td>33.2</td><td>33.2</td><td><code>00:59:58.000</code></td><td><code>HUA-001</code></td><td>flujo_vehicular</td><td>90.1</td><td>90.1</td><td><code>00:59:51.000</code></td></tr><tr><td><code>CC-002</code></td><td>flujo_vehicular</td><td>62.7</td><td>62.7</td><td><code>00:59:54.000</code></td><td><code>HUA-002</code></td><td>flujo_vehicular</td><td>97.1</td><td>97.1</td><td><code>00:59:59.000</code></td></tr><tr><td><code>CC-003</code></td><td>ocupacion_estacionamiento</td><td>42.6</td><td>42.6</td><td><code>00:59:57.500</code></td><td><code>SPP-001</code></td><td>ocupacion_estacionamiento</td><td>66.0</td><td>66.0</td><td><code>00:59:56.000</code></td></tr><tr><td><code>CC-004</code></td><td>calidad_aire</td><td>73.4</td><td>73.4</td><td><code>00:59:53.000</code></td><td><code>SPP-002</code></td><td>flujo_vehicular</td><td>98.0</td><td>98.0</td><td><code>00:59:59.500</code></td></tr><tr><td><code>CC-005</code></td><td>flujo_vehicular</td><td>19.1</td><td>19.1</td><td><code>00:59:52.500</code></td><td><code>CHI-001</code></td><td>calidad_aire</td><td>67.8</td><td>67.8</td><td><code>00:59:56.500</code></td></tr><tr><td><code>TAL-001</code></td><td>flujo_vehicular</td><td>41.0</td><td>41.0</td><td><code>00:59:40.500</code></td><td><code>PEN-001</code></td><td>flujo_vehicular</td><td>68.6</td><td>68.6</td><td><code>00:59:47.000</code></td></tr><tr><td><code>TAL-002</code></td><td>ocupacion_estacionamiento</td><td>60.0</td><td>60.0</td><td><code>00:59:50.000</code></td><td><code>COR-001</code></td><td>calidad_aire</td><td>19.4</td><td>19.4</td><td><code>00:59:43.500</code></td></tr><tr><td><code>TAL-003</code></td><td>calidad_aire</td><td>45.0</td><td>45.0</td><td><code>00:59:58.500</code></td><td><code>COR-002</code></td><td>ocupacion_estacionamiento</td><td>62.8</td><td>62.8</td><td><code>00:59:55.500</code></td></tr>
+</table>
+<p>
+  <b>Estación que cambia entre medición y llegada:</b> <code>TAL-001</code>. Su última lectura <b>por medición</b> es <code>valor=41.0</code> medida en <code>2026-11-07T00:59:40.500-03:00</code> (ID stream <code>1794178065223-0</code>), pero 5 eventos después llegó una <b>lectura tardía</b> (última <b>por llegada</b>, ID <code>1794178065348-0</code>) con <code>valor=48.9</code> medida 52,2 s antes (<code>2026-11-07T00:58:48.335-03:00</code>). El script Lua del consumidor <code>tablero</code> compara <code>ts_nuevo &gt;= ts_guardado</code> antes de hacer <code>HSET</code>/<code>ZADD</code>, impidiendo que la lectura tardía retroceda el tablero.
+</p>
+<div class="interp">
+  <b>Interpretación P1:</b> Un dashboard usaría <b>Redis</b> (1.061 ms vs. 260.99 ms en HBase, 246.0× más rápido) porque mantiene el último valor y el ranking ya ordenados en RAM, mientras que en HBase con clave <code>estacion#timestamp</code> buscar el final de cada prefijo obliga a posicionar 16 scanners en disco/MemStore (salvo que se mantenga una tabla extra con timestamp invertido <code>10^13 - ms</code>).
+</div>
+
+<h3>P2. Ventana de 10 minutos — Redis</h3>
+<p>
+  <b>Consulta:</b> <code>ZRANGEBYSCORE ventana:&lt;est&gt; (ancla-600000) ancla</code> anclada a <code>1794023999500</code> (<code>2026-11-07T00:59:59.500-03:00</code>). Tiempo medido: <b>2.465 ms</b>.
+</p>
+<table>
+  <tr><th>Estación</th><th>Lecturas (10 min)</th><th>Promedio (veh/min)</th><th>MEMORY USAGE</th><th>Estación</th><th>Lecturas (10 min)</th><th>Promedio (veh/min)</th><th>MEMORY USAGE</th></tr>
+  <tr><td><code>CC-001</code></td><td>75</td><td><b>20.89</b></td><td>2,616 B</td><td><code>HUA-002</code></td><td>67</td><td><b>76.50</b></td><td>2,112 B</td></tr><tr><td><code>CC-002</code></td><td>68</td><td><b>58.88</b></td><td>2,104 B</td><td><code>PEN-001</code></td><td>86</td><td><b>87.34</b></td><td>3,136 B</td></tr><tr><td><code>CC-005</code></td><td>70</td><td><b>18.67</b></td><td>2,616 B</td><td><code>SPP-002</code></td><td>75</td><td><b>93.13</b></td><td>2,624 B</td></tr><tr><td><code>HUA-001</code></td><td>62</td><td><b>92.08</b></td><td>2,112 B</td><td><code>TAL-001</code></td><td>74</td><td><b>34.45</b></td><td>2,624 B</td></tr>
+</table>
+<div class="interp">
+  <b>¿Por qué ZSET con score=ts y qué pasa sin recortar? (Interpretación P2):</b> Las lecturas tardías (30–120 s) llegan desordenadas y la frecuencia por estación es aleatoria; el ZSET con <code>score=ts_ms</code> y miembro <code>ts_ms:valor</code> las ordena por tiempo de medición, deduplica repetidos y recorta exactamente 10 min con <code>ZREMRANGEBYSCORE</code>. Con recorte, las 8 ventanas ocupan <b>19,944 B (19.5 KB)</b> (<code>CC-001</code>: 2,616 B). Sin recortar, <code>CC-001</code> sube a <b>43,907 B</b> en 1 h y a <b>5,590,238 B (5.33 MB)</b> en 5 días (53,656 entradas, ~104.2 B/entrada), por lo que en operación continua crecería linealmente sin cota hasta agotar la RAM.
+</div>
+
+<h3>P3. Un rango en HBase — Scan por rango vs. Tabla entera + filtro</h3>
+<p>
+  <b>Consulta:</b> Lecturas de <code>CC-001</code> el 04-nov en <code>[08:00, 10:00)</code>: <b>891 lecturas</b>.
+  Scan por rango <code>[CC-001#2026-11-04T08:00, ...T10:00)</code>: <b>17.81 ms</b>.
+  Scan de tabla entera + <code>RowFilter</code>: <b>4811.77 ms (4.812 s)</b> → <b>270.1× más lento</b>.
+</p>
+<table>
+  <tr><th>Cuarto de hora</th><th>Lecturas</th><th>Promedio</th><th>Cuarto de hora</th><th>Lecturas</th><th>Promedio</th></tr>
+  <tr><td><code>08:00-08:15</code></td><td>112</td><td><b>15.61</b></td><td><code>09:00-09:15</code></td><td>116</td><td><b>24.40</b></td></tr><tr><td><code>08:15-08:30</code></td><td>125</td><td><b>25.67</b></td><td><code>09:15-09:30</code></td><td>91</td><td><b>18.10</b></td></tr><tr><td><code>08:30-08:45</code></td><td>97</td><td><b>17.13</b></td><td><code>09:30-09:45</code></td><td>128</td><td><b>19.24</b></td></tr><tr><td><code>08:45-09:00</code></td><td>104</td><td><b>25.87</b></td><td><code>09:45-10:00</code></td><td>118</td><td><b>17.49</b></td></tr>
+</table>
+<div class="interp">
+  <b>Interpretación P3 y extrapolación a 5 años (×365 datos):</b> Con 5 años en vez de 5 días, el <code>scan</code> por rango seguirá tardando <b>~17.8 ms</b> (complejidad <i>O(k)</i>: salta por el índice de bloques HFile directo al prefijo <code>CC-001#2026-11-04T08:00</code>), mientras que el recorrido completo con filtro crecerá linealmente con el tamaño de la tabla (<i>O(N)</i> × 365) hasta <b>~29.3 minutos</b> por consulta.
+</div>
+
+<h3>P4. Dos patrones de acceso — Redis catálogo + HBase (<code>lecturas</code> vs. <code>lecturas_tipo</code>)</h3>
+<p>
+  <b>Consultas (05-nov [07:00, 09:00), calidad del aire):</b> (a) Leer <code>SMEMBERS tipo:calidad_aire</code> en Redis + 4 scans por rango en <code>lecturas</code> tardó <b>83.52 ms</b>; (b) 1 solo scan <code>[calidad_aire#2026-11-05T07:00, ...T09:00)</code> en <code>lecturas_tipo</code> tardó <b>58.25 ms</b>.
+</p>
+<table>
+  <tr><th>Estación</th><th>Lecturas (07:00–09:00)</th><th>Promedio PM2.5 (µg/m³)</th><th>Máximo PM2.5</th><th>Hora de la 1ª ocurrencia del máximo</th></tr>
+  <tr><td><code>CC-004</code></td><td>877</td><td><b>68.09</b></td><td><b>80.0</b></td><td><code>2026-11-05T07:22:15.000-03:00</code></td></tr><tr><td><code>CHI-001</code></td><td>904</td><td><b>62.18</b></td><td><b>80.0</b></td><td><code>2026-11-05T07:07:14.500-03:00</code></td></tr><tr><td><code>COR-001</code></td><td>890</td><td><b>22.78</b></td><td><b>52.3</b></td><td><code>2026-11-05T08:18:32.500-03:00</code></td></tr><tr><td><code>TAL-003</code></td><td>895</td><td><b>48.14</b></td><td><b>76.5</b></td><td><code>2026-11-05T07:27:43.500-03:00</code></td></tr>
+</table>
+<div class="interp">
+  <b>Costo de la 2ª tabla e interpretación P4:</b> Mantener <code>lecturas_tipo</code> duplica las escrituras en ingesta (×2 <code>put</code> por evento) y duplica el espacio en disco (tras <code>flush</code>: <code>123M	/data/hbase/data/default/lecturas · 147M	/data/hbase/data/default/lecturas_tipo</code>). Como HBase no tiene transacciones entre tablas, si falla la 2ª escritura antes del <code>XACK</code>, la entrada queda en <code>XPENDING</code>; al reintentarse el lote completo, la idempotencia de la row key reescribe ambas tablas sin duplicar filas. <b>¿Cuándo NO vale la pena?</b> Cuando el número de estaciones del tipo buscado es pequeño (aquí solo 4 estaciones: hacer 4 scans puntuales en <code>lecturas</code> cuesta casi lo mismo que 1 scan en <code>lecturas_tipo</code>) o cuando la consulta por tipo es esporádica frente al costo permanente de escribir y almacenar el doble.
+</div>
+
+<h3>P5. Hotspotting y Salting en HBase (Hora en vivo en 3 diseños × 4 regiones)</h3>
+<table>
+  <tr><th>Diseño de Row Key</th><th>Región 1</th><th>Región 2</th><th>Región 3</th><th>Región 4</th><th>Total escrituras</th><th>Lectura 07-nov [00:10, 00:20) (1180 filas)</th></tr>
+  <tr>
+    <td>1) <code>estacion#ts</code></td>
+    <td><b>2,584</b> <small>(<code>(inicio)</code>)</small></td>
+    <td><b>1,729</b> <small>(<code>COR</code>)</small></td>
+    <td><b>1,360</b> <small>(<code>PEN</code>)</small></td>
+    <td><b>1,375</b> <small>(<code>TAL</code>)</small></td>
+    <td><b>7,048</b></td>
+    <td>16 rangos: <b>82.38 ms</b></td>
+  </tr>
+  <tr>
+    <td>2) <code>ts#estacion</code> (día)</td>
+    <td><b>0</b> <small>(<code>(inicio)</code>)</small></td>
+    <td><b>0</b> <small>(<code>11-03</code>)</small></td>
+    <td><b>0</b> <small>(<code>11-05</code>)</small></td>
+    <td><b>7,048</b> <small>(<code>11-06</code>)</small></td>
+    <td><b>7,048</b></td>
+    <td>1 rango: <b>22.55 ms</b></td>
+  </tr>
+  <tr>
+    <td>3) <code>salt#ts#estacion</code></td>
+    <td><b>1,818</b> <small>(<code>0</code>)</small></td>
+    <td><b>2,219</b> <small>(<code>1</code>)</small></td>
+    <td><b>1,731</b> <small>(<code>2</code>)</small></td>
+    <td><b>1,280</b> <small>(<code>3</code>)</small></td>
+    <td><b>7,048</b></td>
+    <td>4 rangos: <b>40.77 ms</b></td>
+  </tr>
+</table>
+<div class="interp">
+  <b>Interpretación y elección P5:</b> (Nota: JMX registra 7.048 escrituras por tabla porque <code>happybase.Batch(batch_size=2000)</code> agrupa en memoria las claves repetidas dentro de cada lote antes de enviarlas a HBase: 7.047 claves distintas + 1 repetida en borde de lote). <code>ts#estacion</code> concentra el <b>100% de las escrituras (7.048) en la Región 4</b> (<i>hotspotting</i> severo por clave monótona). Elegimos <b><code>estacion#ts</code></b> para este sistema porque distribuye la ingesta entre todas las regiones y resuelve en 1 solo rango las consultas por estación (P3, P4a, P6) con apenas 16 estaciones. <b>Cambiaríamos a <code>salt#ts#estacion</code></b> bajo el supuesto de tener miles de estaciones y que la consulta dominante fuera barrer ventanas temporales globales de toda la red (4 rangos fijos paralelizables en vez de miles de scans por estación, sin sufrir el <i>hotspot</i> de escritura de <code>ts#estacion</code>).
+</div>
+
+<h3>P6. Pregunta propia (Redis + HBase): Anomalía actual de las Top-5 estaciones frente a su historia</h3>
+<p>
+  <b>Pregunta:</b> <i>"Para las 5 estaciones con mayor flujo vehicular en este instante (ranking en vivo en Redis), ¿en qué porcentaje y puntaje Z difiere su promedio de los últimos 10 minutos (ventana móvil 00:50–01:00 en Redis) respecto a su media y desviación estándar histórica en esa misma franja horaria (00:50–01:00 de los 5 días previos en HBase)?"</i> Tiempo medido: <b>115.97 ms</b>.
+</p>
+<table>
+  <tr><th>Estación (Top 5 actual)</th><th>Último flujo</th><th>Promedio 10 min (Redis)</th><th>Media ± DE histórica 00:50–01:00 (HBase)</th><th>Lecturas hist.</th><th>Desviación (Z-score)</th><th>Diagnóstico</th></tr>
+  <tr><td><code>SPP-002</code></td><td>98.0</td><td><b>93.13</b></td><td>94.99 ± 12.94</td><td>357</td><td><b>-2.0%</b> (Z=-0.14)</td><td>BAJO_PROMEDIO</td></tr><tr><td><code>HUA-002</code></td><td>97.1</td><td><b>76.50</b></td><td>69.44 ± 13.34</td><td>386</td><td><b>+10.2%</b> (Z=+0.53)</td><td>SOBRE_PROMEDIO</td></tr><tr><td><code>HUA-001</code></td><td>90.1</td><td><b>92.08</b></td><td>97.44 ± 11.00</td><td>399</td><td><b>-5.5%</b> (Z=-0.49)</td><td>BAJO_PROMEDIO</td></tr><tr><td><code>PEN-001</code></td><td>68.6</td><td><b>87.34</b></td><td>72.71 ± 13.15</td><td>388</td><td><b>+20.1%</b> (Z=+1.11)</td><td>SOBRE_PROMEDIO</td></tr><tr><td><code>CC-002</code></td><td>62.7</td><td><b>58.88</b></td><td>60.67 ± 11.98</td><td>376</td><td><b>-3.0%</b> (Z=-0.15)</td><td>BAJO_PROMEDIO</td></tr>
+</table>
+<div class="interp">
+  <b>Justificación del reparto P6:</b> <b>Redis decide el <i>qué</i> y el <i>ahora</i></b> (identifica en <i>O</i>(log <i>N</i>) las 5 estaciones más cargadas con <code>ZREVRANGE ranking:flujo 0 4</code> y entrega su ventana reciente <code>ventana:*</code> ya recortada en RAM), mientras que <b>HBase resuelve el <i>cuándo histórico</i></b> ejecutando solo 5 × 5 = 25 scans acotados <code>[est#diaT00:50, est#diaT01:00)</code> sobre los 5 días previos que no viven en la RAM de Redis.
+</div>
+
+<h2>3. Cuando algo se cae — Experimentos de Fallas (Parte D)</h2>
+
+<h3>D.1 El consumidor <code>ingesta</code> muere a mitad de lote (entre <code>put</code> y <code>XACK</code>)</h3>
+<ul>
+  <li><b>1. Qué quedó en <code>XPENDING</code>:</b> Al forzar <code>os._exit(1)</code> en <code>ingesta-1</code> justo después del <code>batch.put()</code> del lote 5 y antes del <code>XACK</code>, <code>XPENDING sensores:t2 ingesta</code> reportó <b><code>1</code> entrada(s) pendiente(s)</b> a nombre del consumidor <b><code>ingesta-1</code></b> (ID <code>1794177886298-0</code>).</li>
+  <li><b>2. Recuperación por otro consumidor:</b> Se inició <code>ingesta-2</code>, que ejecutó <code>XAUTOCLAIM sensores:t2 ingesta ingesta-2 0 0-0 COUNT 200</code>, reclamó la entrada pendiente de <code>ingesta-1</code>, la re-escribió en HBase, la confirmó con <code>XACK</code> y procesó el resto de la hora en vivo hasta dejar <code>XPENDING = 0</code>.</li>
+  <li><b>3. Cuadratura final en HBase:</b> Al terminar, <code>verificar.py</code> contabilizó exactamente <b>853.953 filas</b> en <code>lecturas</code> y <b>853.953 filas</b> en <code>lecturas_tipo</code>: ni faltan ni sobran filas.</li>
+  <li><b>4. Por qué no duplica filas y qué quedó en la celda:</b> Al inspeccionar la fila reprocesada <code>COR-001#2026-11-07T00:00:02.000-03:00</code> con <code>cells(row, b'm:valor', versions=3, include_timestamp=True)</code> se observan <b>2 versiones</b> en la misma celda: <code>[{'valor': '13.1', 'hbase_cell_ts_ms': 1794177886613}, {'valor': '13.1', 'hbase_cell_ts_ms': 1794177886302}]</code>. Como la row key se construye con la estación y el timestamp de medición (invariantes en el reintento), el segundo <code>put</code> cae en la misma fila y solo añade una versión con nuevo timestamp de escritura, devolviendo en <code>row()</code> la más reciente sin duplicar la fila.</li>
+</ul>
+
+<h3>D.2 Redis se reinicia a mitad de camino (3.000 eventos producidos, 1.500 procesados, 100 en XPENDING)</h3>
+<table>
+  <tr><th>Configuración de Redis</th><th>Momento</th><th>Stream (<code>XLEN</code>)</th><th>Grupos y <code>XPENDING</code></th><th><code>ultimo:*</code></th><th><code>ventana:*</code></th><th><code>tipo:*</code> / <code>ranking</code></th></tr>
+  <tr>
+    <td><b>Sin persistencia</b><br>(<code>--save "" --appendonly no</code>)</td>
+    <td>Antes → <b>Después</b></td>
+    <td>3.000 → <b>0</b></td>
+    <td>2 grupos (pend=100) → <b>0 grupos</b></td>
+    <td>16 → <b>0</b></td>
+    <td>8 → <b>0</b></td>
+    <td>3 / 8 → <b>0 / 0</b></td>
+  </tr>
+  <tr>
+    <td><b>Con AOF + volumen</b><br>(<code>--appendonly yes --appendfsync everysec</code>)</td>
+    <td>Antes → <b>Después</b></td>
+    <td>3.000 → <b>3000</b></td>
+    <td>2 grupos (pend=100, lag=1400/1500) → <b>Intactos (pend=100)</b></td>
+    <td>16 → <b>16</b></td>
+    <td>8 → <b>8</b></td>
+    <td>3 / 8 → <b>3 / 8</b></td>
+  </tr>
+</table>
+<p>
+  <b>Ventana de pérdida y elección de diseño:</b> La <b>ventana de pérdida</b> corresponde a los eventos que ya entraron a Redis (o están en vuelo desde el productor) pero aún no han sido escritos en HBase ni confirmados con <code>XACK</code> (en el experimento: los 1.400 eventos aún no leídos por <code>ingesta</code> + los 100 en <code>XPENDING</code> = 1.500 eventos si Redis pierde su memoria). En cada momento está <b>a salvo en HBase</b> toda la historia ya confirmada con <code>XACK</code> (los 864.000 históricos + los 1.500 ya ingestados), pues vive en el volumen de HBase (WAL + HFiles). En un sistema real de monitoreo urbano aceptaríamos una pérdida máxima de <b>1 segundo</b> ante un corte eléctrico total del servidor, eligiendo por ello <b>AOF con <code>appendfsync everysec</code></b>: resiste al 100% reinicios del contenedor/proceso y solo arriesga ≤ 1 s ante un <i>kernel panic</i> o apagón físico, evitando la penalización de latencia de <code>appendfsync always</code> (un <code>fsync</code> bloqueante en cada <code>XADD</code>).
+</p>
+
+<h2>4. Síntesis Arquitectónica, Tiempos, Escala y Lecciones (Parte E)</h2>
+
+<h3>4.1 Tabla "¿Qué va en cada motor?"</h3>
+<table>
+  <tr><th>Dato del problema</th><th>Motor</th><th>Estructura o Row Key</th><th>Por qué ahí y no en el otro motor</th></tr>
+  <tr>
+    <td>Stream de ingesta en vivo (última hora)</td>
+    <td><b>Redis</b></td>
+    <td>Stream <code>sensores:t2</code> (<code>MAXLEN ~ 10000</code>) + Consumer Groups</td>
+    <td>Desacopla al productor (40 ev/s a 20×) de múltiples lectores independientes (<code>ingesta</code> y <code>tablero</code>) en RAM con <code>XPENDING</code>/<code>XAUTOCLAIM</code>; HBase no tiene colas ni grupos de suscripción.</td>
+  </tr>
+  <tr>
+    <td>Última lectura de cada estación ("ahora")</td>
+    <td><b>Redis</b></td>
+    <td>Hash <code>ultimo:&lt;estacion&gt;</code> (<code>valor</code>, <code>ts</code>, <code>tipo</code>)</td>
+    <td>Acceso <i>O(1)</i> en ~1 ms y actualización condicional atómica vía Lua (<code>ts_nuevo &gt;= ts_prev</code>); en HBase requiere 16 reverse scans (246.0× más lento).</td>
+  </tr>
+  <tr>
+    <td>Ranking instantáneo (Top 5 flujo)</td>
+    <td><b>Redis</b></td>
+    <td>Sorted Set <code>ranking:flujo</code> (score = <code>valor</code>)</td>
+    <td>Redis mantiene el orden en cada inserción (<i>O</i>(log <i>N</i>)) y entrega el Top 5 directo con <code>ZREVRANGE</code>; HBase ordena solo por row key (no por valor cambiante).</td>
+  </tr>
+  <tr>
+    <td>Ventana móvil de 10 minutos</td>
+    <td><b>Redis</b></td>
+    <td>Sorted Set <code>ventana:&lt;estacion&gt;</code> (score = <code>ts_ms</code>, miembro = <code>ts_ms:valor</code>)</td>
+    <td>Ordena lecturas tardías por tiempo de medición y recorta en RAM con <code>ZREMRANGEBYSCORE</code> ocupando solo 19.5 KB en total.</td>
+  </tr>
+  <tr>
+    <td>Catálogo de estaciones por tipo</td>
+    <td><b>Redis</b></td>
+    <td>Set <code>tipo:&lt;tipo&gt;</code> (<code>SMEMBERS</code> / <code>SADD</code>)</td>
+    <td>Conjunto pequeño de metadatos (16 estaciones) leído en sub-milisegundos para parametrizar consultas (P4a).</td>
+  </tr>
+  <tr>
+    <td>Historia por estación (días a años)</td>
+    <td><b>HBase</b></td>
+    <td>Tabla <code>lecturas</code>, row key <code>estacion_id#timestamp</code></td>
+    <td>Escala a cientos de millones de filas en disco (LSM + HFiles) con scans contiguos por rango de fechas en ~17.8 ms; en Redis 5 años (~28 GB) agotarían la RAM.</td>
+  </tr>
+  <tr>
+    <td>Historia por tipo de sensor</td>
+    <td><b>HBase</b></td>
+    <td>Tabla <code>lecturas_tipo</code>, row key <code>tipo#timestamp#estacion_id</code></td>
+    <td>Índice secundario materializado en disco para barrer un tipo de sensor completo en un rango de fechas con un único <code>scan</code> (P4b).</td>
+  </tr>
+</table>
+
+<h3>4.2 Resumen consolidado de tiempos medidos (AMD Ryzen 7 4800H · 16 GB RAM)</h3>
+<table>
+  <tr><th>Pregunta</th><th>Operación / Patrón comparado</th><th>Motor</th><th>Mediana (5 corridas)</th><th>Comparación / Conclusión</th></tr>
+  <tr><td><b>P1</b></td><td>16 últimos valores + Top 5 flujo: Pipeline Redis vs. 16 reverse scans HBase</td><td>Redis vs. HBase</td><td><b>1.061 ms</b> vs. <b>260.99 ms</b></td><td>Redis es <b>246.0× más rápido</b> para el dashboard en vivo.</td></tr>
+  <tr><td><b>P2</b></td><td>Promedio ventana 10 min en 8 estaciones (<code>ZRANGEBYSCORE ventana:*</code>)</td><td>Redis</td><td><b>2.465 ms</b></td><td>Lectura en ~2,5 ms; recorte mantiene las 8 ventanas en 19.5 KB.</td></tr>
+  <tr><td><b>P3</b></td><td>CC-001 (04-nov 08:00–10:00, 891 filas): Scan por rango vs. Scan total + filtro</td><td>HBase</td><td><b>17.81 ms</b> vs. <b>4811.77 ms</b></td><td>El filtro sin row key es <b>270.1× más lento</b> (y escalaría a ~29.3 min en 5 años).</td></tr>
+  <tr><td><b>P4</b></td><td>PM2.5 05-nov 07:00–09:00: (a) 4 scans en <code>lecturas</code> vs. (b) 1 scan en <code>lecturas_tipo</code></td><td>Redis + HBase</td><td><b>83.52 ms</b> vs. <b>58.25 ms</b></td><td>Con 4 estaciones ambos tardan ~lo mismo, pero la 2ª tabla duplica disco y escritura.</td></tr>
+  <tr><td><b>P5</b></td><td>07-nov 00:10–00:20 (1180 filas): 16 rangos (<code>est#ts</code>) · 1 rango (<code>ts#est</code>) · 4 rangos (<code>salt</code>)</td><td>HBase</td><td><b>82.38 ms</b> · <b>22.55 ms</b> · <b>40.77 ms</b></td><td><code>ts#est</code> lee en 1 rango pero sufre 100% de <i>hotspot</i> al escribir (7.048 en 1 región).</td></tr>
+  <tr><td><b>P6</b></td><td>Anomalía Top 5 actual (Redis) vs. media/DE histórica 5 días en 00:50–01:00 (HBase)</td><td>Redis + HBase</td><td><b>115.97 ms</b></td><td>Combina selección/ventana en RAM con 25 micro-rangos históricos en disco.</td></tr>
+</table>
+
+<h3>4.3 Honestidad con la escala y qué no funcionó / qué haríamos distinto</h3>
+<p>
+  <b>Hasta dónde se extrapolan las mediciones y desde dónde ya no:</b> (1) <b>Sí se extrapolan</b> la diferencia de órdenes de magnitud entre un <code>scan</code> por prefijo de row key (<i>O(k)</i>) y un recorrido completo con filtro (<i>O(N)</i>, P3), así como el conteo de escrituras por región en JMX que demuestra el <i>hotspotting</i> de <code>ts#estacion</code> (P5). (2) <b>No se extrapolan</b> los tiempos absolutos de lectura entre 1, 4 y 16 regiones en P4 y P5: en un HBase <i>standalone</i> un único proceso RegionServer sobre un mismo SSD NVMe atiende todas las regiones secuencialmente y sin red ni HDFS, por lo que el <i>hotspotting</i> no satura un nodo frente a otros ociosos y hacer 4 o 16 scans secuenciales por Thrift local apenas añade unos milisegundos de <i>round-trip</i>. En un cluster real con N RegionServers, escribir en una sola región limita el <i>throughput</i> a 1/N de la capacidad del cluster, mientras que los 4 rangos del <i>salting</i> se ejecutarían en paralelo en 4 servidores distintos.
+</p>
+<p>
+  <b>Qué no funcionó y qué haríamos distinto:</b> (1) Guardar solo <code>valor</code> como miembro de <code>ventana:&lt;estacion&gt;</code> colisionaba lecturas distintas con igual valor numérico; lo corregimos usando <code>ts_ms:valor</code> como miembro. (2) La función nativa <code>hash()</code> de Python varía entre procesos por <code>PYTHONHASHSEED</code>; usamos <code>zlib.crc32(estacion) % 4</code> para que el <i>salting</i> de P5 sea 100% determinista. (3) En producción real, ejecutaríamos los 4 o 16 scans de P4a/P5 en paralelo o mediante <code>MultiRowRangeFilter</code> en el servidor en vez de llamadas secuenciales por Thrift.
+</p>
+
+</body>
+</html>

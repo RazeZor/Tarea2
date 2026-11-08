@@ -1,0 +1,394 @@
+{
+  "p1": {
+    "t_redis_ms": 1.061,
+    "t_hbase_ms": 260.988,
+    "ratio_hbase_redis": 246.0,
+    "top5": [
+      [
+        "SPP-002",
+        98.0
+      ],
+      [
+        "HUA-002",
+        97.1
+      ],
+      [
+        "HUA-001",
+        90.1
+      ],
+      [
+        "PEN-001",
+        68.6
+      ],
+      [
+        "CC-002",
+        62.7
+      ]
+    ],
+    "estacion_diferente": {
+      "estacion": "TAL-001",
+      "por_medicion": {
+        "stream_id": "1794178065223-0",
+        "estacion_id": "TAL-001",
+        "tipo_sensor": "flujo_vehicular",
+        "valor": "41.0",
+        "timestamp": "2026-11-07T00:59:40.500-03:00"
+      },
+      "por_llegada": {
+        "stream_id": "1794178065348-0",
+        "estacion_id": "TAL-001",
+        "tipo_sensor": "flujo_vehicular",
+        "valor": "48.9",
+        "timestamp": "2026-11-07T00:58:48.335-03:00"
+      }
+    },
+    "ultimos": [
+      {
+        "estacion": "CC-001",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 33.2,
+        "valor_hbase": 33.2,
+        "ts_ms": 1794023998000,
+        "ts_iso": "2026-11-07T00:59:58.000-03:00"
+      },
+      {
+        "estacion": "CC-002",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 62.7,
+        "valor_hbase": 62.7,
+        "ts_ms": 1794023994000,
+        "ts_iso": "2026-11-07T00:59:54.000-03:00"
+      },
+      {
+        "estacion": "CC-003",
+        "tipo": "ocupacion_estacionamiento",
+        "valor_redis": 42.6,
+        "valor_hbase": 42.6,
+        "ts_ms": 1794023997500,
+        "ts_iso": "2026-11-07T00:59:57.500-03:00"
+      },
+      {
+        "estacion": "CC-004",
+        "tipo": "calidad_aire",
+        "valor_redis": 73.4,
+        "valor_hbase": 73.4,
+        "ts_ms": 1794023993000,
+        "ts_iso": "2026-11-07T00:59:53.000-03:00"
+      },
+      {
+        "estacion": "CC-005",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 19.1,
+        "valor_hbase": 19.1,
+        "ts_ms": 1794023992500,
+        "ts_iso": "2026-11-07T00:59:52.500-03:00"
+      },
+      {
+        "estacion": "TAL-001",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 41.0,
+        "valor_hbase": 41.0,
+        "ts_ms": 1794023980500,
+        "ts_iso": "2026-11-07T00:59:40.500-03:00"
+      },
+      {
+        "estacion": "TAL-002",
+        "tipo": "ocupacion_estacionamiento",
+        "valor_redis": 60.0,
+        "valor_hbase": 60.0,
+        "ts_ms": 1794023990000,
+        "ts_iso": "2026-11-07T00:59:50.000-03:00"
+      },
+      {
+        "estacion": "TAL-003",
+        "tipo": "calidad_aire",
+        "valor_redis": 45.0,
+        "valor_hbase": 45.0,
+        "ts_ms": 1794023998500,
+        "ts_iso": "2026-11-07T00:59:58.500-03:00"
+      },
+      {
+        "estacion": "HUA-001",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 90.1,
+        "valor_hbase": 90.1,
+        "ts_ms": 1794023991000,
+        "ts_iso": "2026-11-07T00:59:51.000-03:00"
+      },
+      {
+        "estacion": "HUA-002",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 97.1,
+        "valor_hbase": 97.1,
+        "ts_ms": 1794023999000,
+        "ts_iso": "2026-11-07T00:59:59.000-03:00"
+      },
+      {
+        "estacion": "SPP-001",
+        "tipo": "ocupacion_estacionamiento",
+        "valor_redis": 66.0,
+        "valor_hbase": 66.0,
+        "ts_ms": 1794023996000,
+        "ts_iso": "2026-11-07T00:59:56.000-03:00"
+      },
+      {
+        "estacion": "SPP-002",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 98.0,
+        "valor_hbase": 98.0,
+        "ts_ms": 1794023999500,
+        "ts_iso": "2026-11-07T00:59:59.500-03:00"
+      },
+      {
+        "estacion": "CHI-001",
+        "tipo": "calidad_aire",
+        "valor_redis": 67.8,
+        "valor_hbase": 67.8,
+        "ts_ms": 1794023996500,
+        "ts_iso": "2026-11-07T00:59:56.500-03:00"
+      },
+      {
+        "estacion": "PEN-001",
+        "tipo": "flujo_vehicular",
+        "valor_redis": 68.6,
+        "valor_hbase": 68.6,
+        "ts_ms": 1794023987000,
+        "ts_iso": "2026-11-07T00:59:47.000-03:00"
+      },
+      {
+        "estacion": "COR-001",
+        "tipo": "calidad_aire",
+        "valor_redis": 19.4,
+        "valor_hbase": 19.4,
+        "ts_ms": 1794023983500,
+        "ts_iso": "2026-11-07T00:59:43.500-03:00"
+      },
+      {
+        "estacion": "COR-002",
+        "tipo": "ocupacion_estacionamiento",
+        "valor_redis": 62.8,
+        "valor_hbase": 62.8,
+        "ts_ms": 1794023995500,
+        "ts_iso": "2026-11-07T00:59:55.500-03:00"
+      }
+    ]
+  },
+  "p2": {
+    "ancla_ms": 1794023999500,
+    "t_redis_ms": 2.465,
+    "estaciones": [
+      {
+        "estacion": "CC-001",
+        "lecturas_10m": 75,
+        "promedio_flujo": 20.89,
+        "memory_usage_bytes": 2616
+      },
+      {
+        "estacion": "CC-002",
+        "lecturas_10m": 68,
+        "promedio_flujo": 58.88,
+        "memory_usage_bytes": 2104
+      },
+      {
+        "estacion": "CC-005",
+        "lecturas_10m": 70,
+        "promedio_flujo": 18.67,
+        "memory_usage_bytes": 2616
+      },
+      {
+        "estacion": "HUA-001",
+        "lecturas_10m": 62,
+        "promedio_flujo": 92.08,
+        "memory_usage_bytes": 2112
+      },
+      {
+        "estacion": "HUA-002",
+        "lecturas_10m": 67,
+        "promedio_flujo": 76.5,
+        "memory_usage_bytes": 2112
+      },
+      {
+        "estacion": "PEN-001",
+        "lecturas_10m": 86,
+        "promedio_flujo": 87.34,
+        "memory_usage_bytes": 3136
+      },
+      {
+        "estacion": "SPP-002",
+        "lecturas_10m": 75,
+        "promedio_flujo": 93.13,
+        "memory_usage_bytes": 2624
+      },
+      {
+        "estacion": "TAL-001",
+        "lecturas_10m": 74,
+        "promedio_flujo": 34.45,
+        "memory_usage_bytes": 2624
+      }
+    ],
+    "mem_total_8_est_10m_bytes": 19944,
+    "mem_cc001_10m_bytes": 2616,
+    "mem_cc001_1h_bytes": 43907,
+    "mem_cc001_5d_bytes": 5590238,
+    "card_cc001_5d": 53656
+  },
+  "p3": {
+    "total_lecturas": 891,
+    "cuartos": {
+      "08:00-08:15": {
+        "lecturas": 112,
+        "promedio": 15.61
+      },
+      "08:15-08:30": {
+        "lecturas": 125,
+        "promedio": 25.67
+      },
+      "08:30-08:45": {
+        "lecturas": 97,
+        "promedio": 17.13
+      },
+      "08:45-09:00": {
+        "lecturas": 104,
+        "promedio": 25.87
+      },
+      "09:00-09:15": {
+        "lecturas": 116,
+        "promedio": 24.4
+      },
+      "09:15-09:30": {
+        "lecturas": 91,
+        "promedio": 18.1
+      },
+      "09:30-09:45": {
+        "lecturas": 128,
+        "promedio": 19.24
+      },
+      "09:45-10:00": {
+        "lecturas": 118,
+        "promedio": 17.49
+      }
+    },
+    "t_rango_ms": 17.81,
+    "t_filtro_ms": 4811.77,
+    "t_filtro_s": 4.812,
+    "factor_lentitud": 270.1,
+    "extrapolacion_5a_min": 29.3
+  },
+  "p4": {
+    "resultados": {
+      "CC-004": {
+        "lecturas": 877,
+        "promedio_pm25": 68.09,
+        "max_pm25": 80.0,
+        "hora_primer_max": "2026-11-05T07:22:15.000-03:00"
+      },
+      "CHI-001": {
+        "lecturas": 904,
+        "promedio_pm25": 62.18,
+        "max_pm25": 80.0,
+        "hora_primer_max": "2026-11-05T07:07:14.500-03:00"
+      },
+      "COR-001": {
+        "lecturas": 890,
+        "promedio_pm25": 22.78,
+        "max_pm25": 52.3,
+        "hora_primer_max": "2026-11-05T08:18:32.500-03:00"
+      },
+      "TAL-003": {
+        "lecturas": 895,
+        "promedio_pm25": 48.14,
+        "max_pm25": 76.5,
+        "hora_primer_max": "2026-11-05T07:27:43.500-03:00"
+      }
+    },
+    "t_patron_a_ms": 83.52,
+    "t_patron_b_ms": 58.25,
+    "espacio_disco": "123M\t/data/hbase/data/default/lecturas\n147M\t/data/hbase/data/default/lecturas_tipo"
+  },
+  "p5": {
+    "filas_rango_10m": 1180,
+    "jmx_deltas": {
+      "p5_est_ts": {
+        "(inicio)": 2584,
+        "COR": 1729,
+        "PEN": 1360,
+        "TAL": 1375
+      },
+      "p5_ts_est": {
+        "(inicio)": 0,
+        "2026-11-03": 0,
+        "2026-11-05": 0,
+        "2026-11-06": 7048
+      },
+      "p5_salt_ts_est": {
+        "(inicio)": 1818,
+        "1": 2219,
+        "2": 1731,
+        "3": 1280
+      }
+    },
+    "t_16_rangos_ms": 82.38,
+    "t_1_rango_ms": 22.55,
+    "t_4_rangos_ms": 40.77
+  },
+  "p6": {
+    "t_hibrida_ms": 115.97,
+    "resultados": [
+      {
+        "estacion": "SPP-002",
+        "ultimo_flujo": 98.0,
+        "prom_10m_redis": 93.13,
+        "prom_hist_hbase": 94.99,
+        "std_hist_hbase": 12.94,
+        "lecturas_hist_5d": 357,
+        "desviacion_pct": -2.0,
+        "z_score": -0.14,
+        "estado": "BAJO_PROMEDIO"
+      },
+      {
+        "estacion": "HUA-002",
+        "ultimo_flujo": 97.1,
+        "prom_10m_redis": 76.5,
+        "prom_hist_hbase": 69.44,
+        "std_hist_hbase": 13.34,
+        "lecturas_hist_5d": 386,
+        "desviacion_pct": 10.2,
+        "z_score": 0.53,
+        "estado": "SOBRE_PROMEDIO"
+      },
+      {
+        "estacion": "HUA-001",
+        "ultimo_flujo": 90.1,
+        "prom_10m_redis": 92.08,
+        "prom_hist_hbase": 97.44,
+        "std_hist_hbase": 11.0,
+        "lecturas_hist_5d": 399,
+        "desviacion_pct": -5.5,
+        "z_score": -0.49,
+        "estado": "BAJO_PROMEDIO"
+      },
+      {
+        "estacion": "PEN-001",
+        "ultimo_flujo": 68.6,
+        "prom_10m_redis": 87.34,
+        "prom_hist_hbase": 72.71,
+        "std_hist_hbase": 13.15,
+        "lecturas_hist_5d": 388,
+        "desviacion_pct": 20.1,
+        "z_score": 1.11,
+        "estado": "SOBRE_PROMEDIO"
+      },
+      {
+        "estacion": "CC-002",
+        "ultimo_flujo": 62.7,
+        "prom_10m_redis": 58.88,
+        "prom_hist_hbase": 60.67,
+        "std_hist_hbase": 11.98,
+        "lecturas_hist_5d": 376,
+        "desviacion_pct": -3.0,
+        "z_score": -0.15,
+        "estado": "BAJO_PROMEDIO"
+      }
+    ]
+  }
+}

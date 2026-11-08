@@ -1,0 +1,27 @@
+{
+  "exit_code_ingesta_1": 1,
+  "xpending_tras_caida": {
+    "pending": 1,
+    "min": "1794177886298-0",
+    "max": "1794177886298-0",
+    "consumers": [
+      {
+        "name": "ingesta-1",
+        "pending": 1
+      }
+    ]
+  },
+  "celda_reprocesada": {
+    "row_key": "COR-001#2026-11-07T00:00:02.000-03:00",
+    "versiones": [
+      {
+        "valor": "13.1",
+        "hbase_cell_ts_ms": 1794177886613
+      },
+      {
+        "valor": "13.1",
+        "hbase_cell_ts_ms": 1794177886302
+      }
+    ]
+  }
+}

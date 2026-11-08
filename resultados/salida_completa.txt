@@ -1,0 +1,240 @@
+
+========================================================================
+PARTE D.2 — Experimento: Redis se reinicia a mitad de camino (3.000 eventos)
+========================================================================
+
+--- D.2 Probando configuración: Contraria: Sin persistencia (--save '' --appendonly no) ---
+ Container pmd-redis Recreate 
+ Container pmd-redis Recreated 
+ Container pmd-redis Starting 
+ Container pmd-redis Started 
+ Container pmd-redis Waiting 
+ Container pmd-redis Healthy 
+  Estado ANTES de `docker compose restart redis`:  {"stream_existe": true, "xlen": 3000, "grupos": [{"name": "ingesta", "consumers": 1, "pending": 100, "entries_read": 1600, "lag": 1400}, {"name": "tablero", "consumers": 1, "pending": 0, "entries_read": 1500, "lag": 1500}], "claves_ultimo": 16, "claves_ventana": 8, "claves_tipo": 3, "ranking_card": 8}
+ Container pmd-redis Restarting 
+ Container pmd-redis Started 
+ Container pmd-redis Running 
+ Container pmd-redis Waiting 
+ Container pmd-redis Healthy 
+  Estado DESPUÉS de `docker compose restart redis`: {"stream_existe": false, "xlen": 0, "grupos": [], "claves_ultimo": 0, "claves_ventana": 0, "claves_tipo": 0, "ranking_card": 0}
+
+--- D.2 Probando configuración: Elegida (Parte A): AOF everysec con volumen pmd-redis ---
+ Container pmd-redis Recreate 
+ Container pmd-redis Recreated 
+ Container pmd-redis Starting 
+ Container pmd-redis Started 
+ Container pmd-redis Waiting 
+ Container pmd-redis Healthy 
+  Estado ANTES de `docker compose restart redis`:  {"stream_existe": true, "xlen": 3000, "grupos": [{"name": "ingesta", "consumers": 1, "pending": 100, "entries_read": 1600, "lag": 1400}, {"name": "tablero", "consumers": 1, "pending": 0, "entries_read": 1500, "lag": 1500}], "claves_ultimo": 16, "claves_ventana": 8, "claves_tipo": 3, "ranking_card": 8}
+ Container pmd-redis Restarting 
+ Container pmd-redis Started 
+ Container pmd-redis Running 
+ Container pmd-redis Waiting 
+ Container pmd-redis Healthy 
+  Estado DESPUÉS de `docker compose restart redis`: {"stream_existe": true, "xlen": 3000, "grupos": [{"name": "ingesta", "consumers": 1, "pending": 100, "entries_read": 1600, "lag": 1400}, {"name": "tablero", "consumers": 1, "pending": 0, "entries_read": 1500, "lag": 1500}], "claves_ultimo": 16, "claves_ventana": 8, "claves_tipo": 3, "ranking_card": 8}
+=== Parte B.1: Carga histórica directo a HBase ===
+Generados 864,000 eventos históricos en 5.62 s
+  Rango: 2026-11-01T23:58:09.813-03:00 -> 2026-11-06T23:59:59.500-03:00
+Recreando tablas pre-divididas (`lecturas` y `lecturas_tipo`)...
+  Tabla `lecturas`:      864,000 puts en 32.14 s (26,881 filas/s)
+  Tabla `lecturas_tipo`: 864,000 puts en 32.09 s (26,924 filas/s)
+  Tiempo total paralelo: 32.14 s (53,761 puts/s combinados)
+Redis inicializado: stream `sensores:t2` y grupos `ingesta` y `tablero` creados.
+
+========================================================================
+PARTE B.2 + D.1 — Camino en vivo (20×) con caída y recuperación de consumidor
+========================================================================
+[ingesta-1] 💀 Simulando caída (os._exit(1)) en lote 5 DESPUÉS del put de 1 eventos (1794177886298-0 .. 1794177886298-0) y ANTES del XACK.
+
+--- D.1.1 Consumidor `ingesta-1` terminó con código de salida: 1 ---
+  Estado de XPENDING en grupo `ingesta` tras la muerte de `ingesta-1`:
+    - Total pendientes: 1
+    - Rango de IDs:     1794177886298-0 .. 1794177886298-0
+    - Por consumidor:   [{'name': 'ingesta-1', 'pending': 1}]
+    - Primeras 3 entradas en XPENDING: [{'message_id': '1794177886298-0', 'consumer': 'ingesta-1', 'time_since_delivered': 16, 'times_delivered': 1}]
+
+--- D.1.2 Lanzando `ingesta-2` para recuperar pendientes (XAUTOCLAIM) y continuar ---
+Productor iniciado: 7,200 eventos -> stream `sensores:t2` (MAXLEN ~ 10,000, ritmo 25 ms/ev)
+Productor finalizado: 7,200 eventos producidos en 180.00 s (40.0 ev/s)
+[tablero-1] Finalizado: 7,200 entradas procesadas en 7200 lotes.
+[ingesta-2] Recuperadas y confirmadas 1 entradas pendientes vía XAUTOCLAIM.
+[ingesta-2] Finalizado: 7,196 entradas procesadas en 7184 lotes.
+
+--- D.1.4 Inspección de celda reprocesada en HBase (VERSIONS => 3) ---
+  Row key inspeccionada: SPP-002#2026-11-07T00:06:40.000-03:00
+  Versiones en `m:valor`: [{'valor': '90.0', 'hbase_cell_ts_ms': 1794177906202}]
+  Lectura normal `row()[b'm:valor']`: 90.0 (sin duplicar la fila)
+
+========================================================================
+PARTE B.3 — VERIFICACIÓN DEL PIPELINE COMPLETO
+========================================================================
+
+1. Stream de Redis (`sensores:t2`) y Consumer Groups:
+   - Eventos producidos en vivo (entries-added): 7,200 (control: 7,200)
+   - Largo actual del stream (XLEN):             7,200
+   - Grupo `ingesta`: procesadas=7,200 | XPENDING=0 (esperado: 0)
+   - Grupo `tablero`: procesadas=7,200 | XPENDING=0 (esperado: 0)
+
+2. Estructuras del Tablero en Redis:
+   - Hashes `ultimo:<estacion>`:  16/16 estaciones
+   - ZSET `ranking:flujo`:        8/8 estaciones de flujo vehicular
+   - ZSETs `ventana:<estacion>`:  8/8 ventanas de 10 min activas
+   - Sets `tipo:<tipo>` (catálogo): {'flujo_vehicular': 8, 'ocupacion_estacionamiento': 4, 'calidad_aire': 4} (total=16/16)
+
+3. Tablas de HBase (conteo con FirstKeyOnlyFilter() AND KeyOnlyFilter()):
+   - Filas en `lecturas`:      853,953 (control: 853,953)
+   - Filas en `lecturas_tipo`: 853,953 (control: 853,953)
+
+4. Explicación de cuadratura con los números de control:
+   - Total eventos generados (histórico + vivo): 864,000 + 7,200 = 871,200
+   - Eventos repetidos tal cual (P_REPETIDA=2%): 17,243 (caen en la misma row key)
+   - Choques de clave (misma estación y ms, distinto valor por lectura tardía): 4
+   - Claves distintas esperadas en HBase: 871,200 - 17,243 - 4 = 853,953
+
+✅ VERIFICACIÓN EXITOSA: Todos los conteos calzan exactamente con los números de control.
+
+========================================================================
+PREGUNTA 1 — 'Ahora': Redis contra HBase
+========================================================================
+
+1.1 Último valor de las 16 estaciones (medición):
+estacion                      tipo  valor_redis  valor_hbase         ts_ms                        ts_iso
+  CC-001           flujo_vehicular         33.2         33.2 1794023998000 2026-11-07T00:59:58.000-03:00
+  CC-002           flujo_vehicular         62.7         62.7 1794023994000 2026-11-07T00:59:54.000-03:00
+  CC-003 ocupacion_estacionamiento         42.6         42.6 1794023997500 2026-11-07T00:59:57.500-03:00
+  CC-004              calidad_aire         73.4         73.4 1794023993000 2026-11-07T00:59:53.000-03:00
+  CC-005           flujo_vehicular         19.1         19.1 1794023992500 2026-11-07T00:59:52.500-03:00
+ TAL-001           flujo_vehicular         41.0         41.0 1794023980500 2026-11-07T00:59:40.500-03:00
+ TAL-002 ocupacion_estacionamiento         60.0         60.0 1794023990000 2026-11-07T00:59:50.000-03:00
+ TAL-003              calidad_aire         45.0         45.0 1794023998500 2026-11-07T00:59:58.500-03:00
+ HUA-001           flujo_vehicular         90.1         90.1 1794023991000 2026-11-07T00:59:51.000-03:00
+ HUA-002           flujo_vehicular         97.1         97.1 1794023999000 2026-11-07T00:59:59.000-03:00
+ SPP-001 ocupacion_estacionamiento         66.0         66.0 1794023996000 2026-11-07T00:59:56.000-03:00
+ SPP-002           flujo_vehicular         98.0         98.0 1794023999500 2026-11-07T00:59:59.500-03:00
+ CHI-001              calidad_aire         67.8         67.8 1794023996500 2026-11-07T00:59:56.500-03:00
+ PEN-001           flujo_vehicular         68.6         68.6 1794023987000 2026-11-07T00:59:47.000-03:00
+ COR-001              calidad_aire         19.4         19.4 1794023983500 2026-11-07T00:59:43.500-03:00
+ COR-002 ocupacion_estacionamiento         62.8         62.8 1794023995500 2026-11-07T00:59:55.500-03:00
+
+1.2 Top 5 estaciones de flujo vehicular con más flujo:
+   - Desde Redis (ZREVRANGE ranking:flujo 0 4): [('SPP-002', 98.0), ('HUA-002', 97.1), ('HUA-001', 90.1), ('PEN-001', 68.6), ('CC-002', 62.7)]
+   - Desde HBase (ordenado tras 16 reverse scans): [('SPP-002', 98.0), ('HUA-002', 97.1), ('HUA-001', 90.1), ('PEN-001', 68.6), ('CC-002', 62.7)]
+
+1.3 Estación que cambia según 'último por medición' vs 'último por llegada':
+   - Estación identificada: TAL-001
+   - Último por MEDICIÓN: valor=41.0 | timestamp=2026-11-07T00:59:40.500-03:00 (ID stream: 1794178065223-0)
+   - Último por LLEGADA:  valor=48.9 | timestamp=2026-11-07T00:58:48.335-03:00 (ID stream: 1794178065348-0, lectura tardía)
+
+1.4 Tiempos medidos (mediana de 5 corridas, descartando la 1ª):
+   - Redis (pipeline 16 HGETALL + 1 ZREVRANGE): 1.061 ms  (corridas: [1.137, 1.194, 1.061, 0.895, 0.843] ms)
+   - HBase (16 reverse scans con limit=1):      260.988 ms  (corridas: [267.897, 271.035, 260.988, 255.561, 250.451] ms)
+   - Razón HBase / Redis:                       246.0× más lento en HBase
+   - Interpretación: Un dashboard en vivo debe usar Redis porque mantiene el último estado y el ranking pre-ordenado en RAM (< 1 ms en un solo viaje de pipeline), mientras que HBase debe abrir 16 scanners reversos sobre bloques de disco/MemStore y ordenar en la aplicación.
+
+========================================================================
+PREGUNTA 2 — Ventana de 10 minutos (Redis)
+========================================================================
+
+2.1 Ancla (medición más reciente del stream): 1794023999500 ms (rango [1794023399500, 1794023999500])
+estacion  lecturas_10m  promedio_flujo  memory_usage_bytes
+  CC-001            75           20.89                2616
+  CC-002            68           58.88                2104
+  CC-005            70           18.67                2616
+ HUA-001            62           92.08                2112
+ HUA-002            67           76.50                2112
+ PEN-001            86           87.34                3136
+ SPP-002            75           93.13                2624
+ TAL-001            74           34.45                2624
+
+2.2 Uso de memoria (MEMORY USAGE) — Con recorte vs. Sin recorte:
+   - CC-001 recortada a 10 min (75 entradas):     2,616 bytes (~34.9 B/entrada)
+   - Total 8 estaciones recortadas a 10 min:          19,944 bytes (19.5 KB)
+   - CC-001 SIN recortar en 1 hora (413 entradas):    43,907 bytes (42.9 KB)
+   - CC-001 SIN recortar en 5 días (53,656 entradas):  5,590,238 bytes (5.33 MB -> ~42.7 MB las 8 estaciones)
+
+2.3 Tiempo medido (mediana de 5 corridas): 2.465 ms (corridas: [2.557, 2.216, 2.465, 2.259, 2.567] ms)
+   - Interpretación: El Sorted Set con score=timestamp ordena lecturas tardías según su reloj de medición y permite acotar exactamente 10 minutos con ZREMRANGEBYSCORE/ZRANGEBYSCORE; sin ese recorte, la estructura crece linealmente (~87 B/entrada) hasta agotar la RAM de Redis.
+
+========================================================================
+PREGUNTA 3 — Un rango en HBase: Scan por rango vs. Tabla entera + filtro
+========================================================================
+
+3.1 Total lecturas de CC-001 el 04-nov [08:00, 10:00): 891
+cuarto_de_hora  lecturas  promedio_flujo
+   08:00-08:15       112           15.61
+   08:15-08:30       125           25.67
+   08:30-08:45        97           17.13
+   08:45-09:00       104           25.87
+   09:00-09:15       116           24.40
+   09:15-09:30        91           18.10
+   09:30-09:45       128           19.24
+   09:45-10:00       118           17.49
+
+3.2 Comparación de tiempos (mediana de 5 corridas):
+   - Scan por rango [row_start, row_stop): 17.81 ms  (corridas: [17.19, 17.81, 17.41, 20.37, 19.99] ms)
+   - Tabla entera + RowFilter en servidor: 4811.77 ms (4.812 s) (corridas: [4.779, 4.908, 4.746, 4.822, 4.812] s)
+   - Factor de lentitud:                   270.1× más lento el recorrido completo
+   - Extrapolación a 5 años (×365 datos):  el scan por rango se mantiene en ~17.8 ms (O(k), salta directo al bloque de CC-001#2026-11-04), mientras que el scan completo crecería linealmente O(N) a ~29.3 min (~1756 s).
+
+========================================================================
+PREGUNTA 4 — Dos patrones de acceso: Redis catálogo + HBase (`lecturas` vs `lecturas_tipo`)
+========================================================================
+
+4.1 Resultados PM2.5 (05-nov [07:00, 09:00)) para estaciones de calidad del aire:
+estacion  lecturas  promedio_pm25  max_pm25               hora_primer_max
+  CC-004       877          68.09      80.0 2026-11-05T07:22:15.000-03:00
+ CHI-001       904          62.18      80.0 2026-11-05T07:07:14.500-03:00
+ COR-001       890          22.78      52.3 2026-11-05T08:18:32.500-03:00
+ TAL-003       895          48.14      76.5 2026-11-05T07:27:43.500-03:00
+
+4.2 Comparación de tiempos y costo de mantener la segunda tabla:
+   - a) `lecturas` (SMEMBERS + 4 scans por estación): 83.52 ms (corridas: [114.33, 83.19, 82.26, 100.47, 83.52] ms)
+   - b) `lecturas_tipo` (1 solo scan por tipo):       58.25 ms (corridas: [97.2, 58.12, 58.25, 58.53, 57.85] ms)
+   - Espacio en disco (HFiles tras flush):
+123M	/data/hbase/data/default/lecturas
+147M	/data/hbase/data/default/lecturas_tipo
+   - Interpretación: Con solo 4 estaciones de calidad del aire en un HBase standalone local, hacer 4 scans cortos en `lecturas` y 1 scan continuo en `lecturas_tipo` tardan órdenes similares (pocas decenas de ms), pero tener `lecturas_tipo` duplica las escrituras (×2 puts) y el espacio en disco; si la 2ª escritura falla antes del XACK, el consumidor reintentará el lote completo y la idempotencia de la row key corregirá la tabla faltante sin duplicar la primera. No vale la pena mantener `lecturas_tipo` cuando el catálogo tiene pocas estaciones por tipo o las consultas por tipo son infrecuentes frente al volumen de ingesta.
+
+========================================================================
+PREGUNTA 5 — Hotspotting y salting en HBase (3 diseños de row key)
+========================================================================
+Esperando 12 s para estabilizar contadores JMX iniciales...
+Esperando 15 s para publicación de métricas JMX de HBase...
+
+5.1 Escrituras recibidas por cada región durante la hora en vivo (JMX writeRequestCount):
+                     Diseño                 Región 1               Región 2               Región 3                   Región 4  Total
+             1) estacion#ts 2,584 (start='(inicio)')    1,729 (start='COR')    1,360 (start='PEN')        1,375 (start='TAL')   7048
+   2) ts#estacion (por día)     0 (start='(inicio)') 0 (start='2026-11-03') 0 (start='2026-11-05') 7,048 (start='2026-11-06')   7048
+3) salt#ts#estacion (mod 4) 1,818 (start='(inicio)')      2,219 (start='1')      1,731 (start='2')          1,280 (start='3')   7048
+
+5.2 Tiempo de consulta 'todas las estaciones el 07-nov [00:10, 00:20)' (1,180 filas):
+   - Diseño 1 (`estacion#ts`, 16 rangos):      82.38 ms (corridas: [82.38, 76.91, 85.74, 92.48, 80.02] ms)
+   - Diseño 2 (`ts#estacion`, 1 rango):        22.55 ms (corridas: [24.92, 22.04, 21.74, 27.69, 22.55] ms)
+   - Diseño 3 (`salt#ts#estacion`, 4 rangos):  40.77 ms (corridas: [42.59, 36.16, 39.73, 40.8, 40.77] ms)
+   - Interpretación: `ts#estacion` sufre hotspotting total (7.200 escrituras en la última región y 0 en las demás), mientras que `estacion#ts` y `salt#ts#estacion` reparten la carga en las 4 regiones; elegiríamos `estacion#ts` cuando las consultas filtran por estación (y hay pocas estaciones), pero cambiaríamos a `salt#ts#estacion` si hubiera miles de estaciones y la consulta principal fuera barrer ventanas globales de tiempo (4 rangos fijos en vez de miles).
+
+========================================================================
+PREGUNTA 6 — La propia: Detección de anomalías (Redis presente + HBase historia)
+========================================================================
+Pregunta formulada: 'Para las 5 estaciones con mayor flujo vehicular AHORA MISMO
+(ranking en vivo de Redis), ¿cuánto se desvía su promedio de los últimos 10 minutos
+(ventana móvil en Redis, 00:50–01:00 del 07-nov) respecto a su comportamiento
+histórico en esa misma franja horaria (00:50–01:00 de los 5 días previos en HBase)?'
+
+6.1 Resultado de la consulta híbrida (Top 5 flujo actual vs. historia 00:50–01:00):
+estacion  ultimo_flujo  prom_10m_redis  prom_hist_hbase  std_hist_hbase  lecturas_hist_5d  desviacion_pct  z_score         estado
+ SPP-002          98.0           93.13            94.99           12.94               357            -2.0    -0.14  BAJO_PROMEDIO
+ HUA-002          97.1           76.50            69.44           13.34               386            10.2     0.53 SOBRE_PROMEDIO
+ HUA-001          90.1           92.08            97.44           11.00               399            -5.5    -0.49  BAJO_PROMEDIO
+ PEN-001          68.6           87.34            72.71           13.15               388            20.1     1.11 SOBRE_PROMEDIO
+  CC-002          62.7           58.88            60.67           11.98               376            -3.0    -0.15  BAJO_PROMEDIO
+
+6.2 Tiempo medido (mediana de 5 corridas): 115.97 ms (corridas: [114.33, 115.97, 111.3, 132.92, 139.45] ms)
+   - Interpretación y justificación del reparto: Redis selecciona en sub-milisegundos las 5 estaciones críticas del instante (`ranking:flujo`) y su promedio móvil de 10 min (`ventana:*`) evitando escanear las 16 estaciones en disco, mientras que HBase resuelve únicamente los 5×5=25 micro-rangos históricos de esas 5 estaciones en la franja 00:50–01:00 (datos de días anteriores que ya fueron recortados de la RAM de Redis).
+
+✅ Resumen de las 6 preguntas guardado en /home/nacho-dev/Escritorio/Universidad/Procesamiento masivo de datos/Tarea2/resultados/preguntas_resumen.json
+
+========================================================================
+🎉 PIPELINE COMPLETO FINALIZADO EXITOSAMENTE EN 396.4 s (6.6 min)
+   (Carga histórica B.1: 49.1 s)
+========================================================================
